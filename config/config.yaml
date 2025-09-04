@@ -1,0 +1,9 @@
+defaults:
+- model
+- _self_
+
+hydra:
+  output_subdir:
+  run:
+    dir: data/logs/model/${now:%Y-%m-%d}/
+    

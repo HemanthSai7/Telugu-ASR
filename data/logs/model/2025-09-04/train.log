@@ -1,0 +1,20 @@
+[2025-09-04 18:28:05,679][tensorflow][INFO] - Run on [PhysicalDevice(name='/physical_device:GPU:0', device_type='GPU')]
+[2025-09-04 18:28:07,383][tensorflow][INFO] - Reading entries from /home/hemanth/GIT_Projects/RA/data/train.tsv
+[2025-09-04 18:28:07,643][tensorflow][INFO] - Total entries: 95280
+[2025-09-04 18:28:08,666][tensorflow][INFO] - Reading entries from /home/hemanth/GIT_Projects/RA/data/dev.tsv
+[2025-09-04 18:28:08,668][tensorflow][INFO] - Total entries: 1438
+[2025-09-04 19:44:06,671][tensorflow][INFO] - Run on [PhysicalDevice(name='/physical_device:GPU:0', device_type='GPU')]
+[2025-09-04 19:44:08,355][tensorflow][INFO] - Reading entries from /home/hemanth/GIT_Projects/RA/data/train.tsv
+[2025-09-04 19:44:08,626][tensorflow][INFO] - Total entries: 95280
+[2025-09-04 19:44:10,087][tensorflow][INFO] - Reading entries from /home/hemanth/GIT_Projects/RA/data/dev.tsv
+[2025-09-04 19:44:10,090][tensorflow][INFO] - Total entries: 1438
+[2025-09-04 19:44:58,123][tensorflow][INFO] - Run on [PhysicalDevice(name='/physical_device:GPU:0', device_type='GPU')]
+[2025-09-04 19:44:59,898][tensorflow][INFO] - Reading entries from /home/hemanth/GIT_Projects/RA/data/train.tsv
+[2025-09-04 19:45:00,142][tensorflow][INFO] - Total entries: 95280
+[2025-09-04 19:45:01,170][tensorflow][INFO] - Reading entries from /home/hemanth/GIT_Projects/RA/data/dev.tsv
+[2025-09-04 19:45:01,172][tensorflow][INFO] - Total entries: 1438
+[2025-09-04 19:45:13,375][tensorflow][INFO] - Run on [PhysicalDevice(name='/physical_device:GPU:0', device_type='GPU')]
+[2025-09-04 19:45:15,189][tensorflow][INFO] - Reading entries from /home/hemanth/GIT_Projects/RA/data/train.tsv
+[2025-09-04 19:45:15,433][tensorflow][INFO] - Total entries: 95280
+[2025-09-04 19:45:16,472][tensorflow][INFO] - Reading entries from /home/hemanth/GIT_Projects/RA/data/dev.tsv
+[2025-09-04 19:45:16,474][tensorflow][INFO] - Total entries: 1438
