@@ -21,7 +21,7 @@ logger = tf.get_logger()
 def main(
     config: DictConfig,
     batch_size: int = None,
-    saved: str = "../../../logs/model/2025-09-04/checkpoints/09.h5",
+    saved: str = "../../../logs/model/2025-09-06/checkpoints/35.h5", #28, 24,14,17 best | 29, 25, 26, 27 okayish
     output: str = "output.tsv",
 ):
     config = Config(OmegaConf.to_container(config, resolve=True), training=True)

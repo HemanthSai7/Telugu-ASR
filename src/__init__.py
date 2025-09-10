@@ -1,6 +1,6 @@
 from .configs import *
 from .dataset import *
-from .loss import *
+from .losses import *
 from .metrics import *
 from .model import *
 from .optimizers import *

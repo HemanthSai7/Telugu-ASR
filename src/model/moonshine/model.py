@@ -1,4 +1,4 @@
-from src.model import Encoder, Decoder, BaseModel
+from src.model.moonshine import Encoder, Decoder, BaseModel
 from typing import Union, Optional, List
 
 import tensorflow as tf

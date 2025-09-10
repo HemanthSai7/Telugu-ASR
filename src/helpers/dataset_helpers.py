@@ -75,7 +75,7 @@ def prepare_featurizers(
 
     model_name = "google/gemma-2-2b"
     telugu_tokens = extract_telugu_tokens_from_pretrained(model_name)
-    telugu_tokens.extend([" ", "!", "'", ",", "?"])
+    telugu_tokens.extend([" ","."])
     print(f"Telugu tokens: {telugu_tokens} with length: {len(telugu_tokens)}")
 
     tokenizer = TeluguTokenizer(telugu_tokens, model_max_length=None)

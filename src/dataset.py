@@ -7,6 +7,7 @@ from src.utils import (
     file_util,
     math_util,
 )
+from src.augmentations import Augmentation
 
 import os
 import numpy as np
@@ -72,6 +73,7 @@ class BaseDataset:
         metadata: str = None,
         sample_rate: int = 16000,
         stage: str = "train",
+        augmentations: Augmentation = Augmentation(None),
         name: str = "base_dataset",
         **kwargs,
     ):
@@ -88,6 +90,7 @@ class BaseDataset:
         self.total_steps = None
         self.metadata = metadata
         self.sample_rate = sample_rate
+        self.augmentations = augmentations
         self.name = name
 
     def parse(self, *args, **kwargs):
@@ -111,6 +114,7 @@ class ASRDataset(BaseDataset):
         metadata: str = None,
         buffer_size: int = BUFFER_SIZE,
         sample_rate: int = 16000,
+        augmentations: dict = {},
         training=False,
         name: str = "asr_dataset",
         **kwargs,
@@ -126,12 +130,14 @@ class ASRDataset(BaseDataset):
             metadata=metadata,
             sample_rate=sample_rate,
             stage=stage,
+            augmentations=augmentations,
             name=name,
         )
         self.entries = []
         self.tokenizer = tokenizer
         self.speech_featurizer = speech_featurizer
         self.training = training
+        self.augmentations = Augmentation(augmentations)
 
     def read_entries(self):
         if hasattr(self, "entries") and len(self.entries) > 0:
@@ -152,7 +158,9 @@ class ASRDataset(BaseDataset):
     def _process_item(self, path: tf.Tensor, audio: tf.Tensor, transcript: tf.Tensor):
         with tf.device("/CPU:0"):
             audio_inputs = data_util.read_raw_audio(audio, sample_rate=self.sample_rate)
+            audio_inputs = self.augmentations.signal_augment(audio_inputs)
             audio_inputs = self.speech_featurizer(audio_inputs, training=self.training)
+            audio_inputs = self.augmentations.feature_augment(audio_inputs)
             audio_inputs = tf.expand_dims(audio_inputs, axis=-1)
 
             transcript_str = tf.strings.as_string(transcript)

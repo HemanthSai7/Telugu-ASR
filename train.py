@@ -6,7 +6,7 @@ from src.helpers import (
 )
 from src.model import ASRModel
 from src.configs import Config
-from src.loss import MaskedCrossEntropyLoss
+from src.losses import MaskedCrossEntropyLoss
 from src.utils import env_util
 
 from omegaconf import DictConfig, OmegaConf
@@ -86,15 +86,15 @@ def main(
     ]
     # print(model.count_params())
 
-    model.fit(
-        train_data_loader,
-        epochs=config.learning_config["running_config"]["num_epochs"],
-        validation_data=valid_data_loader,
-        steps_per_epoch=train_dataset.total_steps,
-        validation_steps=valid_dataset.total_steps if valid_data_loader else None,
-        callbacks=callbacks,
-        verbose=1,
-    )
+    # model.fit(
+    #     train_data_loader,
+    #     epochs=config.learning_config["running_config"]["num_epochs"],
+    #     validation_data=valid_data_loader,
+    #     steps_per_epoch=train_dataset.total_steps,
+    #     validation_steps=valid_dataset.total_steps if valid_data_loader else None,
+    #     callbacks=callbacks,
+    #     verbose=1,
+    # )
 
 if __name__ == "__main__":
     main()
