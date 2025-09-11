@@ -3,10 +3,10 @@
 **Telugu Automatic Speech Recognition (ASR)** system built **from scratch** under a strict parameter budget.
 
 This project was developed as part of a research pilot task to design a compact ASR model for Telugu within **15M parameters**.  
-The final model contains **5.11M parameters** and achieves:
+The final model contains **3.26M parameters** and achieves:
 
-- **Word Error Rate (WER): 0.68**  
-- **Character Error Rate (CER): 0.37**
+- **Word Error Rate (WER): 0.52**  
+- **Character Error Rate (CER): 0.21**
 
 ---
 
@@ -14,7 +14,7 @@ The final model contains **5.11M parameters** and achieves:
 
 - **Architecture**: Whisper-style encoder–decoder Transformer (**Moonshine** variant)  
 - **Subsampling**: FastConformer subsampling with 3× depthwise separable Conv1D (stride=2, kernel size=9)  
-- **Embedding dimension**: 256  
+- **Embedding dimension**: 192 
 - **Positional encoding**: Rotary (RoPE)  
 - **Training objective**: Cross-entropy loss  
 - **Hyperparameter tuning**: [Optuna](https://optuna.org/) (21 trials)  
@@ -26,7 +26,7 @@ This work explores tokenization strategies, efficient modeling, and hyperparamet
 
 | Model Size | WER  | CER  |
 |------------|------|------|
-| 5.11M      | 0.68 | 0.37 |  
+| 3.26M      | 0.52 | 0.21 |  
 ---
 
 ## 📂 Repository Structure
@@ -48,5 +48,6 @@ This work explores tokenization strategies, efficient modeling, and hyperparamet
 Read the full project report with background, experiments, and analysis:
 - Report for this project: [Telugu ASR report](https://api.wandb.ai/links/ondevicevoice/4cbmfkpm) 
 - The Model inference output file is available at: [Model inference](https://github.com/HemanthSai7/Telugu-ASR/blob/main/data/logs/model/2025-09-04/output.tsv)
+
 
 
