@@ -1,5 +1,5 @@
-from src.model.layers.attention import MHSAModule, CrossAttentionModule
-from src.model.layers.mlp import FFNModule
+from src.models.layers.attention import MHSAModule, CrossAttentionModule
+from src.models.layers.mlp import FFNModule
 from typing import Optional, Union
 
 import tensorflow as tf

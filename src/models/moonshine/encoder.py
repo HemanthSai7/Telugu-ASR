@@ -1,5 +1,5 @@
 from src.utils import math_util
-from src.model.layers import FFNModule, MHSAModule
+from src.models.layers import FFNModule, MHSAModule
 from typing import Optional, Union
 
 import tensorflow as tf

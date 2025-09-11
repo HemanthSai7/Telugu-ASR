@@ -1,4 +1,4 @@
-from src.model.layers.positional_encoding import RoPEPositionalEncoding
+from src.models.layers.positional_encoding import RoPEPositionalEncoding
 from typing import Optional, Union
 
 import tensorflow as tf
@@ -249,6 +249,7 @@ class MultiHeadAttention(tf.keras.layers.MultiHeadAttention):
 class MHSAModule(tf.keras.layers.Layer):
     def __init__(
         self,
+        mha_type: str = "sdpa",
         num_heads: int = 4,
         head_dim: int = 64,
         dropout: float = 0.0,
@@ -263,37 +264,62 @@ class MHSAModule(tf.keras.layers.Layer):
     ):
         super(MHSAModule, self).__init__(name=name, **kwargs)
         self.return_attn_scores = return_attn_scores
-        self.mha = MultiHeadAttention(
-            num_heads=num_heads,
-            key_dim=head_dim,
-            dropout=dropout,
-            output_shape=output_shape,
-            kernel_initializer=kernel_initializer,
-            bias_initializer=bias_initializer,
-            kernel_regularizer=kernel_regularizer,
-            bias_regularizer=bias_regularizer,
-        )
+        if mha_type == "sdpa":
+            self.mha = MultiHeadAttention(
+                num_heads=num_heads,
+                key_dim=head_dim,
+                dropout=dropout,
+                output_shape=output_shape,
+                kernel_initializer=kernel_initializer,
+                bias_initializer=bias_initializer,
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
+            )
+        elif mha_type == "relmha":
+            self.mha = RelPositionMultiHeadAttention(
+                num_heads=num_heads,
+                key_dim=head_dim,
+                dropout=dropout,
+                output_shape=output_shape,
+                kernel_initializer=kernel_initializer,
+                bias_initializer=bias_initializer,
+                kernel_regularizer=kernel_regularizer,
+                bias_regularizer=bias_regularizer,
+                name=f"{name}_relmha",
+            )
+        else:
+            raise ValueError(f"Unsupported mha_type: {mha_type}. Supported types are 'sdpa' and 'relmha'.")
         self.ln = tf.keras.layers.LayerNormalization(
             name=f"{name}_ln",
             gamma_regularizer=kernel_regularizer,
             beta_regularizer=bias_regularizer,
         )
-        self.do = tf.keras.layers.Dropout(
-            rate=dropout,
-            name=f"{name}_dropout",
-        )
+        self.mha_type = mha_type
+        self.do = tf.keras.layers.Dropout(rate=dropout, name=f"{name}_dropout")
         self.res_add = tf.keras.layers.Add(name=f"{name}_residual_add")
 
     def call(self, inputs, training=False, use_causal_mask=False, mask=None):
-        outputs = self.mha(
-            query=inputs,
-            value=inputs,
-            key=inputs,
-            training=training,
-            use_causal_mask=use_causal_mask, 
-            attention_mask=mask,
-            return_attention_scores=self.return_attn_scores
-        )
+        if self.mha_type == "sdpa":
+            outputs = self.mha(
+                query=inputs,
+                value=inputs,
+                key=inputs,
+                training=training,
+                use_causal_mask=use_causal_mask, 
+                attention_mask=mask,
+                return_attention_scores=self.return_attn_scores
+            )
+        else:
+            outputs = self.mha(
+                query=inputs,
+                value=inputs,
+                key=inputs,
+                training=training,
+                use_causal_mask=use_causal_mask, 
+                attention_mask=mask,
+                return_attention_scores=self.return_attn_scores
+            )
+        outputs = self.do(outputs, training=training)
         outputs = self.res_add([inputs, outputs])
         return self.ln(outputs)        
     
