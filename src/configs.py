@@ -55,7 +55,6 @@ class DataConfig:
         if not config:
             config = {}
         self.train_dataset_config = DatasetConfig(config.get("train_dataset_config", {}))
-        print(self.train_dataset_config)
         self.eval_dataset_config = DatasetConfig(config.get("eval_dataset_config", {}))
         self.test_dataset_configs = DatasetConfig(config.get("test_dataset_configs", {}))
 

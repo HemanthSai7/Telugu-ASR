@@ -1,5 +1,5 @@
 from src.utils import file_util, app_util
-from src.model import BaseModel
+from src.models import BaseModel
 from src.dataset import ASRSliceDataset
 
 

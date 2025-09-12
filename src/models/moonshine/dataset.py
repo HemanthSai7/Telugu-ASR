@@ -1,7 +1,7 @@
 from src.schemas import TrainInput, TargetLabels
 from src.configs import DatasetConfig
 from src.speech_featurizer import SpeechFeaturizer
-from src.tokenizer import TeluguTokenizer
+from src.tokenizer import CharacterTokenizer
 from src.utils import (
     data_util,
     file_util,
@@ -16,7 +16,7 @@ import tensorflow as tf
 logger = tf.get_logger()
 
 def get(
-    tokenizer: TeluguTokenizer,
+    tokenizer: CharacterTokenizer,
     speech_featurizer: SpeechFeaturizer,
     dataset_config: DatasetConfig,
 ):
@@ -32,37 +32,28 @@ def get_shape(
     config,
     *datasets,
 ):
-    max_audio_length, max_prediction_length, max_label_length = None, None, None
+    max_input_length, max_shifted_right_input_length_shape, max_text_target_length_shape = None, None, None
 
-    audio_input_shape = [max_audio_length, config.speech_config["num_feature_bins"], 1]
-    audio_input_length_shape = []
+    audio_input_shape = [max_input_length]
+    shifted_right_text_input_shape = [max_shifted_right_input_length_shape]
+    text_target_shape = [max_text_target_length_shape]
 
-    prediction_shape = [max_prediction_length]
-    prediction_length_shape = []
-
-    labels_shape = [max_label_length]
-    labels_length_shape = []
+    audio_input_shape.extend([config.speech_config["num_feature_bins"], 1])
 
     padded_shapes = (
         TrainInput(
-            audio_inputs=tf.TensorShape(audio_input_shape),
-            audio_inputs_length=tf.TensorShape(audio_input_length_shape),
-            prediction=tf.TensorShape(prediction_shape),
-            prediction_length=tf.TensorShape(prediction_length_shape),
+            audio_inputs = tf.TensorShape(audio_input_shape),
+            shifted_right_text_inputs = tf.TensorShape(shifted_right_text_input_shape),
         ),
         TargetLabels(
-            labels=tf.TensorShape(labels_shape),
-            labels_length=tf.TensorShape(labels_length_shape),
+            text_targets=tf.TensorShape(text_target_shape),
         )
     )
 
     return dict(
         audio_input_shape=audio_input_shape,
-        audio_input_length_shape=audio_input_length_shape,
-        prediction_shape=prediction_shape,
-        prediction_length_shape=prediction_length_shape,
-        labels_shape=labels_shape,
-        labels_length_shape=labels_length_shape,
+        shifted_right_text_input_shape=shifted_right_text_input_shape,
+        text_target_shape=text_target_shape,
         padded_shapes=padded_shapes,
     )
 
@@ -112,7 +103,7 @@ class ASRDataset(BaseDataset):
     def __init__(
         self,
         stage: str,
-        tokenizer: TeluguTokenizer,
+        tokenizer: CharacterTokenizer,
         speech_featurizer: SpeechFeaturizer,
         data_paths: list,
         cache: bool = False,
@@ -172,51 +163,49 @@ class ASRDataset(BaseDataset):
             audio_inputs = self.augmentations.feature_augment(audio_inputs)
             audio_inputs = tf.expand_dims(audio_inputs, axis=-1)
 
-            audio_inputs_length = tf.cast(tf.shape(audio_inputs)[0], tf.int32)
-
             transcript_str = tf.strings.as_string(transcript)
             transcript_str = tf.ensure_shape(transcript_str, [])
 
             def tokenize_transcript(text):
                 text_str = text.numpy().decode("utf-8")
                 # print(f"Tokenizing transcript: {text_str}")
-                # print("@@@@@@@@@@@@@@@", np.array(self.tokenizer.encode(text_str, add_special_tokens=False), dtype=np.int32))
-                return np.array(self.tokenizer.encode(text_str, add_special_tokens=False), dtype=np.int32)
+                # print("@@@@@@@@@@@@@@@", np.array(self.tokenizer.encode(text_str, add_special_tokens=True), dtype=np.int32))
+                return np.array(self.tokenizer.encode(text_str, add_special_tokens=True), dtype=np.int32)
             
-            labels = tf.py_function(
+            tokens = tf.py_function(
                 func=tokenize_transcript,
                 inp=[transcript_str],
                 Tout=tf.int32,
             )
-            labels_length = tf.cast(tf.shape(labels)[0], tf.int32)
 
-            prediction = self.tokenizer.prepend_blank(labels)
-            # print("PREDICTION:", prediction)
-            prediction_length = tf.cast(tf.shape(prediction)[0], tf.int32)
+            # Transformer Training
+            # 1. Audio input: Waveform/ MFCC
+            # 2. Shifted right text input: [BOS] + transcript
+            # 3. Text target: transcript + [EOS]
 
-        return path, audio_inputs, audio_inputs_length, prediction, prediction_length, labels, labels_length,
+            # Decoder inputs: [BOS, token1, token2, ..., tokenN]
+            shifted_right_text_inputs = tokens[:-1]
+
+            # Target labels: [token1, token2, ..., tokenN, EOS]
+            text_target = tokens[1:]
+
+        return path, audio_inputs, shifted_right_text_inputs, text_target
 
     def parse(self, path: tf.Tensor, audio: tf.Tensor, transcript: tf.Tensor):
         (
             _, 
             audio_inputs, 
-            audio_inputs_length, 
-            prediction,
-            prediction_length,
-            labels,
-            labels_length,
+            shifted_right_text_inputs, 
+            text_target
         ) = self._process_item(path=path, audio=audio, transcript=transcript)
 
         return (
             TrainInput(
-                audio_inputs=audio_inputs,
-                audio_inputs_length=audio_inputs_length,
-                prediction=prediction,
-                prediction_length=prediction_length
+                audio_inputs=audio_inputs, 
+                shifted_right_text_inputs=shifted_right_text_inputs
             ), 
             TargetLabels(
-                labels=labels,
-                labels_length=labels_length,
+                text_targets=text_target
             )
         )
 
@@ -239,13 +228,10 @@ class ASRDataset(BaseDataset):
             padding_values = (
                 TrainInput(
                     audio_inputs=0.0,
-                    audio_inputs_length=0,
-                    prediction=tf.constant(0, dtype=tf.int32),
-                    prediction_length=tf.constant(0, dtype=tf.int32),
+                    shifted_right_text_inputs=tf.constant(self.tokenizer.pad_token_id, dtype=tf.int32),
                 ),
                 TargetLabels(
-                    labels=tf.constant(0, dtype=tf.int32),
-                    labels_length=tf.constant(0, dtype=tf.int32),
+                    text_targets=tf.constant(self.tokenizer.pad_token_id, dtype=tf.int32),
                 ),
             ),
             drop_remainder=self.drop_remainder,

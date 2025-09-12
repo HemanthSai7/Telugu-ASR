@@ -1,9 +1,9 @@
 defaults:
-- model
+- conformer
 - _self_
 
 hydra:
   output_subdir:
   run:
-    dir: data/logs/model/${now:%Y-%m-%d}/
+    dir: data/logs/conformer/${now:%Y-%m-%d}/
     

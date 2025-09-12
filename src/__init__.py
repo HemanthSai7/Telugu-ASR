@@ -2,7 +2,7 @@ from .configs import *
 from .dataset import *
 from .losses import *
 from .metrics import *
-from .model import *
+from .models import *
 from .optimizers import *
 from .schemas import *
 from .speech_featurizer import *

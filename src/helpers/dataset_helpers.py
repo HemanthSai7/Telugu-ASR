@@ -1,5 +1,5 @@
 from src.speech_featurizer import SpeechFeaturizer
-from src.tokenizer import CharacterTokenizer, extract_telugu_tokens_from_pretrained, TeluguTokenizer
+from src.tokenizer import extract_telugu_tokens_from_pretrained, TeluguTokenizer
 from src.dataset import get
 
 import os
@@ -87,7 +87,7 @@ def prepare_featurizers(
 def prepare_training_datasets(
     config,
     speech_featurizer: SpeechFeaturizer,
-    tokenizer: CharacterTokenizer,
+    tokenizer: TeluguTokenizer,
 ):
     train_dataset = get(
         tokenizer=tokenizer,
@@ -118,7 +118,7 @@ def prepare_training_dataloaders(
 def prepare_testing_datasets(
     config,
     speech_featurizer: SpeechFeaturizer,
-    tokenizer: CharacterTokenizer,
+    tokenizer: TeluguTokenizer,
 ):
     test_dataset = get(
         speech_featurizer=speech_featurizer,

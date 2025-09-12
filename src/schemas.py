@@ -1,8 +1,19 @@
-def TrainInput(audio_inputs, shifted_right_text_inputs):
+def TrainInput(audio_inputs, audio_inputs_length, prediction, prediction_length):
     return {
         "audio_inputs": audio_inputs,
-        "shifted_right_text_inputs": shifted_right_text_inputs,
+        "audio_inputs_length": audio_inputs_length,
+        "prediction": prediction,
+        "prediction_length": prediction_length
     }
 
-def TargetLabels(text_targets):
-    return {"text_targets": text_targets}
+def TargetLabels(labels, labels_length):
+    return {
+        "labels": labels,
+        "labels_length": labels_length
+    }
+
+def OutputLogits(logits, logits_length):
+    return {
+        "logits": logits,
+        "logits_length": logits_length
+    }

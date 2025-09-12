@@ -244,12 +244,282 @@ class MultiHeadAttention(tf.keras.layers.MultiHeadAttention):
             "bias_regularizer": tf.keras.regularizers.serialize(self.bias_regularizer),
         })
         return config
+    
+
+@tf.keras.utils.register_keras_serializable(package=__name__)
+class RelPositionMultiHeadAttention(tf.keras.layers.Layer):
+    def __init__(
+        self,
+        num_heads: int,
+        head_dim,
+        output_shape: int = None,
+        dropout: float = 0.0,
+        use_projection_bias: bool = False,
+        return_attn_coef: bool = False,
+        kernel_initializer: Union[str, tf.keras.initializers.Initializer] = "glorot_uniform",
+        bias_initializer: Union[str, tf.keras.initializers.Initializer] = "zeros",
+        kernel_regularizer: Optional[Union[str, tf.keras.regularizers.Regularizer]] = None,
+        bias_regularizer: Optional[Union[str, tf.keras.regularizers.Regularizer]] = None,
+        **kwargs,
+    ):
+        super(RelPositionMultiHeadAttention, self).__init__(**kwargs)
+        self.kernel_initializer = tf.keras.initializers.get(kernel_initializer)
+        self.kernel_regularizer = tf.keras.regularizers.get(kernel_regularizer)
+        self.bias_initializer = tf.keras.initializers.get(bias_initializer)
+        self.bias_regularizer = tf.keras.regularizers.get(bias_regularizer)
+
+        self.head_dim = head_dim
+        self.num_heads = num_heads
+        self.output_size = output_shape
+        self.use_projection_bias = use_projection_bias
+        self.return_attn_coef = return_attn_coef
+
+        self.dropout = tf.keras.layers.Dropout(dropout, name = "dropout")
+        self._dropout_rate = dropout
+
+    def build(
+            self,
+            input_shape,
+    ):
+        num_pos_features = input_shape[-1][-1]
+        num_query_features = input_shape[0][-1] 
+        num_key_features = input_shape[1][-1]
+        num_value_features = input_shape[2][-1] if len(input_shape) > 2 else num_key_features
+        output_size = self.output_size if self.output_size is not None else num_value_features
+
+        self.query_kernel = self.add_weight(
+            name = "query_kernel",
+            shape = [self.num_heads, num_query_features, self.head_dim],
+            initializer = self.kernel_initializer,
+            regularizer = self.kernel_regularizer,
+        )
+        self.key_kernel = self.add_weight(
+            name = "key_kernel",
+            shape = [self.num_heads, num_key_features, self.head_dim],
+            initializer = self.kernel_initializer,
+            regularizer = self.kernel_regularizer,
+        )
+        self.value_kernel = self.add_weight(
+            name = "value_kernel",
+            shape = [self.num_heads, num_value_features, self.head_dim],
+            initializer = self.kernel_initializer,
+            regularizer = self.kernel_regularizer,
+        )
+        self.projection_kernel = self.add_weight(
+            name="projection_kernel",
+            shape = [self.num_heads, self.head_dim, output_size],
+            initializer = self.kernel_initializer,
+            regularizer = self.kernel_regularizer,
+        )
+        if self.use_projection_bias:
+            self.projection_bias = self.add_weight(
+                name = "projection_bias",
+                shape = [output_size],
+                initializer = self.bias_initializer,
+                regularizer = self.bias_regularizer,
+                constraint = self.bias_constraint,
+            )
+        else:
+            self.projection_bias = None
+
+        self.pos_kernel = self.add_weight(
+            name="pos_kernel",
+            shape=[self.num_heads, num_pos_features, self.head_dim],
+            initializer=self.kernel_initializer,
+            regularizer=self.kernel_regularizer,
+        )
+        # positional bias is used to shift the attention scores
+        self.pos_bias_u = self.add_weight(
+            name="pos_bias_u",
+            shape=[self.num_heads, self.head_dim],
+            initializer=self.bias_initializer,
+            regularizer=self.kernel_regularizer,
+        )
+        # positional bias is used to shift the attention scores
+        self.pos_bias_v = self.add_weight(
+            name="pos_bias_v",
+            shape=[self.num_heads, self.head_dim],
+            initializer=self.bias_initializer,
+            regularizer=self.kernel_regularizer,
+        )
+        super(RelPositionMultiHeadAttention, self).build(input_shape)
+
+    @staticmethod
+    def relative_shift(x):
+        r"""Shift the elements in the second dimension of x to the right by 1"""
+        x_shape = tf.shape(x)
+        x = tf.pad(x, [[0, 0], [0, 0], [0, 0], [1, 0]])
+        x = tf.reshape(x, [x_shape[0], x_shape[1], x_shape[3] + 1, x_shape[2]])
+        x = tf.reshape(x[:, :, 1:, :], x_shape)
+        return x
+    
+    def call_qkv(
+            self,
+            query,
+            key,
+            value,
+            training = False,
+    ):
+        # verify the shape of query, key, value
+        if key.shape[-2] != value.shape[-2]:
+            raise ValueError(
+                "the number of elements in `key`  must be equal to " "the same as the number of elements in `value`"
+            )
+        
+        # Linear transformation
+
+        # query shape x query_kernel_shape: [batch_size, query_len, num_query_features] x [batch_size, num_heads, num_query_features, head_dim] -> [batch_size, query_len, num_heads, head_dim]
+        query = tf.einsum("...NI,HIO->...NHO", query, self.query_kernel)
+        # key shape x key_kernel_shape: [batch_size, key_len, num_key_features] x [batch_size, num_heads, num_key_features, head_dim] -> [batch_size, key_len, num_heads, head_dim]
+        key = tf.einsum("...MI,HIO->...MHO", key, self.key_kernel)
+        # value shape x value_kernel_shape: [batch_size, value_len, num_value_features] x [batch_size, num_heads, num_value_features, head_dim] -> [batch_size, value_len, num_heads, head_dim]
+        value = tf.einsum("...MI,HIO->...MHO", value, self.value_kernel)
+
+        return query, key, value
+    
+    def call_attention(
+            self,
+            query,
+            key,
+            value,
+            logits,
+            training=False,
+            mask=None,
+    ):
+        # mask = attention mask with shape [BS, Tquery, Tkey] with 1 is for positions we want to attent, 0 for masked positions
+        if mask is not None:
+            if len(mask.shape) < 2:
+                raise ValueError("`mask` must have at leat 2 dimensions")
+            if query.shape[-3] != mask.shape[-2]:
+                raise ValueError("masks's second to last dimension must be equal to " "the number of elements in `query`")
+            if key.shape[-3] != mask.shape[-1]:
+                raise ValueError("masks's last dimension must be equal to " "the number of elements in `key`")
+            
+        # apply mask
+        if mask is not None:
+            mask = tf.cast(mask, tf.float32)
+
+            # possibly expand on the head dimension so broadcasting works
+            if len(mask.shape) != len(logits.shape):
+                mask = tf.expand_dims(mask, axis = -3)
+
+            logits += -10e9 * (1.0 - mask)
+
+        attn_coef = tf.nn.softmax(logits)
+
+        # attention dropout
+        attn_coef_dropout = self.dropout(attn_coef, training = training)
+
+        # attention * value shape: [batch_size, num_heads, query_len, value_len] x [batch_size, value_len, num_heads, num_value_features] -> [batch_size, query_len, num_heads, num_value_features]
+        multihead_output = tf.einsum("...HNM,...MHI->...NHI", attn_coef_dropout, value)
+
+        # Run the outputs through another linear projection layer. Recombining heads
+        # is automatically done by the tf.einsum call.
+        # multihead_output shape x query_kernel_shape: [batch_size, query_len, num_heads, num_value_features] x [batch_size, num_heads, num_value_features, head_dim] -> [batch_size, query_len, head_dim]
+        output = tf.einsum("...NHI,HIO->...NO", multihead_output, self.projection_kernel)
+
+        if self.projection_bias is not None:
+            output += self.projection_bias
+
+        return output, attn_coef
+    
+    def call(
+            self,
+            inputs,
+            training=False,
+            mask=None,
+            **kwargs
+    ):
+        r"""Calculate the attention output
+
+        Equation:
+            Attention(Q, K, V) = softmax(((QW_q)(KW_k)^T + Srel )/ sqrt(d_k))V
+
+            logits = query_with_u * key + query_with_v * pos
+            output = softmax(logits) * value
+
+        """
+        query, key, value, pos = inputs
+
+        query, key, value = self.call_qkv(query, key, value, training=training)
+
+        # pos shape x pos_kernel_shape: [batch_size, pos_len, num_pos_features] x [batch_size, num_heads, num_pos_features, head_dim] -> [batch_size, pos_len, num_heads, head_dim]
+        pos = tf.einsum("...MI,HIO->...MHO", pos, self.pos_kernel)
+
+        query_with_u = query + self.pos_bias_u
+        query_with_v = query + self.pos_bias_v
+
+        # Calculate dot product attention
+        logits_with_u = tf.einsum("...NHO,...MHO->...HNM", query_with_u, key) # QK^T
+        logits_with_v = tf.einsum("...NHO,...MHO->...HNM", query_with_v, pos)
+        logits_with_v = self.relative_shift(logits_with_v)
+
+        logits = logits_with_u + logits_with_v[:, :, :, : tf.shape(logits_with_u)[3]] # QK^T + Srel
+
+        depth = tf.constant(self.head_dim, dtype=tf.float32)
+        logits /= tf.math.sqrt(depth) # (QK^T + Srel) / sqrt(d_k)
+
+        output, attn_coef = self.call_attention(query, key, value, logits, training=training, mask=mask)
+
+        if self.return_attn_coef:
+            return output, attn_coef
+        else:
+            return output
+        
+    def compute_output_shape(
+            self,
+            input_shape,
+    ):
+        """Return the output shape of the layer given the input shape.
+
+        Args:
+            input_shape: Shape tuple (tuple of integers)
+
+        Returns:
+            Output shape: Shape tuple (tuple of integers)
+        """
+        num_value_features = input_shape[2][-1] if len(input_shape) > 2 else input_shape[1][-1]
+        output_size = self.output_size if self.output_size is not None else num_value_features
+
+        output_shape = input_shape[0][:-1] + (output_size,)
+
+        if self.return_attn_coef:
+            num_query_elements = input_shape[0][-2]
+            num_key_elements = input_shape[1][-2]
+            attn_coef_shape = input_shape[0][:-2] + (
+                self.num_heads,
+                num_query_elements,
+                num_key_elements,
+            )
+
+            return output_shape, attn_coef_shape
+        else:
+            return output_shape
+        
+    def get_config(self):
+        config = super().get_config()
+
+        config.update(
+            head_dim = self.head_dim,
+            num_heads = self.num_heads,
+            output_size = self.output_size,
+            dropout = self._dropout_rate,
+            use_projection_bias = self.use_projection_bias,
+            return_attn_coef = self.return_attn_coef,
+            kernel_initializer = tf.keras.initializers.serialize(self.kernel_initializer),
+            kernel_regularizer = tf.keras.regularizers.serialize(self.kernel_regularizer),
+            bias_initializer = tf.keras.initializers.serialize(self.bias_initializer),
+            bias_regularizer = tf.keras.regularizers.serialize(self.bias_regularizer),
+        )
+
+        return config
+
 
 @tf.keras.utils.register_keras_serializable(package=__name__)
 class MHSAModule(tf.keras.layers.Layer):
     def __init__(
         self,
-        mha_type: str = "sdpa",
+        attention_type: str = "sdpa",
         num_heads: int = 4,
         head_dim: int = 64,
         dropout: float = 0.0,
@@ -264,7 +534,7 @@ class MHSAModule(tf.keras.layers.Layer):
     ):
         super(MHSAModule, self).__init__(name=name, **kwargs)
         self.return_attn_scores = return_attn_scores
-        if mha_type == "sdpa":
+        if attention_type == "sdpa":
             self.mha = MultiHeadAttention(
                 num_heads=num_heads,
                 key_dim=head_dim,
@@ -275,10 +545,10 @@ class MHSAModule(tf.keras.layers.Layer):
                 kernel_regularizer=kernel_regularizer,
                 bias_regularizer=bias_regularizer,
             )
-        elif mha_type == "relmha":
+        elif attention_type == "relmha":
             self.mha = RelPositionMultiHeadAttention(
                 num_heads=num_heads,
-                key_dim=head_dim,
+                head_dim=head_dim,
                 dropout=dropout,
                 output_shape=output_shape,
                 kernel_initializer=kernel_initializer,
@@ -288,18 +558,19 @@ class MHSAModule(tf.keras.layers.Layer):
                 name=f"{name}_relmha",
             )
         else:
-            raise ValueError(f"Unsupported mha_type: {mha_type}. Supported types are 'sdpa' and 'relmha'.")
+            raise ValueError(f"Unsupported attention_type: {attention_type}. Supported types are 'sdpa' and 'relmha'.")
         self.ln = tf.keras.layers.LayerNormalization(
             name=f"{name}_ln",
             gamma_regularizer=kernel_regularizer,
             beta_regularizer=bias_regularizer,
         )
-        self.mha_type = mha_type
+        self.attention_type = attention_type
         self.do = tf.keras.layers.Dropout(rate=dropout, name=f"{name}_dropout")
         self.res_add = tf.keras.layers.Add(name=f"{name}_residual_add")
 
     def call(self, inputs, training=False, use_causal_mask=False, mask=None):
-        if self.mha_type == "sdpa":
+        inputs, pos  = inputs
+        if self.attention_type == "sdpa":
             outputs = self.mha(
                 query=inputs,
                 value=inputs,
@@ -311,9 +582,7 @@ class MHSAModule(tf.keras.layers.Layer):
             )
         else:
             outputs = self.mha(
-                query=inputs,
-                value=inputs,
-                key=inputs,
+                [inputs, inputs, inputs, pos],
                 training=training,
                 use_causal_mask=use_causal_mask, 
                 attention_mask=mask,

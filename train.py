@@ -4,9 +4,9 @@ from src.helpers import (
     prepare_training_datasets, 
     prepare_training_dataloaders
 )
-from src.model import ASRModel
+from src.models import Conformer
 from src.configs import Config
-from src.losses import MaskedCrossEntropyLoss
+from src.losses import RnntLoss
 from src.utils import env_util
 
 from omegaconf import DictConfig, OmegaConf
@@ -55,27 +55,34 @@ def main(
         shapes=shapes,
     )
 
+    print(shapes)
+
     for batch in train_data_loader:
         # print("Batch input keys:", batch[0].keys())
         # print("Batch target keys:", batch[1].keys())
-        # print("Length of shifted_right_text_inputs:", batch[0]["shifted_right_text_inputs"])
-        # print("text_targets dtype:", batch[1]["text_targets"])
-        # print("text_targets shape:", batch[1]["text_targets"].shape)
-        print("Input sentence",tokenizer.batch_decode(batch[0]["shifted_right_text_inputs"].numpy().tolist()))
+        print("Prediction:", batch[0]["prediction"])
+        print("Labels:", batch[1]["labels"])
+        print("Input sentence",tokenizer.batch_decode(batch[0]["prediction"].numpy().tolist()))
         break
 
     with strategy.scope():
-        model = ASRModel(**config.model_config, vocab_size=tokenizer.vocab_size, tokenizer=tokenizer)
-        model.make(**shapes, batch_size=global_batch_size)
-        # model.run_eagerly = False
-        model.summary(expand_nested=False)
+        model = Conformer(**config.model_config, vocab_size=tokenizer.vocab_size, tokenizer=tokenizer)
+        model.make(
+            audio_input_shape=shapes["audio_input_shape"],
+            audio_input_length_shape=shapes["audio_input_length_shape"],
+            prediction_shape=shapes["prediction_shape"],
+            prediction_length_shape=shapes["prediction_length_shape"],
+            batch_size=global_batch_size
+        )
+        # model.run_eagerly = True
+        model.summary(expand_nested=True)
 
         if config.learning_config["pretrained"]:
             model.load_weights(config.learning_config["pretrained"], by_name=True)
         model.compile(
             optimizer=tf.keras.optimizers.get(config.learning_config["optimizer_config"]),
-            loss=MaskedCrossEntropyLoss(global_batch_size=global_batch_size, ignore_class=tokenizer.pad_token_id),
-            run_eagerly=False,
+            loss=RnntLoss(blank=0, global_batch_size=global_batch_size),
+            run_eagerly=True,
         )
 
     callbacks = [

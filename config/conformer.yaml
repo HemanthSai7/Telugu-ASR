@@ -1,0 +1,133 @@
+speech_config:
+  sample_rate: 16000
+  frame_ms: 25
+  stride_ms: 10
+  num_feature_bins: 80
+  feature_type: log_mel_spectrogram
+  preemphasis: 0.97
+  pad_end: False
+  lower_edge_hertz: 0.0
+  upper_edge_hertz: 8000.0
+  output_floor: 1e-9
+  log_base: "10"
+  nfft: 512
+  normalize_signal: True
+  normalize_zscore: False
+  normalize_min_max: False
+  padding: 0.0
+
+model_config:
+  name: conformer
+  d_model: 144
+  subsampling_config:
+    name: conv2d
+    filters: 144
+    kernel_size: 3
+    strides: 2
+    padding: same
+  encoder_config:
+    num_blocks: 16
+    fc_factor: 0.5
+    attention_type: relmha
+    head_dim: 36
+    num_heads: 4
+    kernel_size: 32
+    dropout: 0.1
+  decoder_config:
+    embed_dim: 320
+    embed_dropout: 0
+    num_rnns: 1
+    rnn_units: 320
+    rnn_type: lstm
+    rnn_implementation: 2
+    layer_norm: True
+    projection_units: 0
+    joint_dim: 320
+    prejoint_linear: True
+    joint_activation: tanh
+    joint_mode: add
+  kernel_regularizer:
+    class_name: l2
+    config:
+      l2: 6.0267189935506624e-05
+  bias_regularizer:
+    class_name: l2
+    config:
+      l2: 6.0267189935506624e-05
+  kernel_initializer:
+    class_name: glorot_uniform
+    config:
+      seed: 42
+  bias_initializer: zeros
+
+data_config:
+  train_dataset_config:
+    enabled: True
+    data_paths:
+      - /home/hemanth/GIT_Projects/Telugu-ASR/data/train.tsv
+    shuffle: True
+    cache: True
+    buffer_size: 1000
+    drop_remainder: True
+    stage: train
+    metadata: null
+    indefinite: True
+
+  eval_dataset_config:
+    enabled: True
+    data_paths:
+      - /home/hemanth/GIT_Projects/Telugu-ASR/data/dev.tsv
+    shuffle: True
+    cache: True
+    buffer_size: 1000
+    drop_remainder: True
+    stage: eval
+    metadata: null
+    indefinite: True
+
+  test_dataset_config:
+    enabled: True
+    data_paths:
+      - /home/hemanth/GIT_Projects/Telugu-ASR/data/test.tsv
+    shuffle: False
+    cache: True
+    buffer_size: 1000
+    drop_remainder: False
+    stage: test
+    indefinite: False
+
+learning_config:
+  optimizer_config:
+    class_name: Adam
+    config:
+      learning_rate:
+        class_name: src.optimizers.schedules>TransformerLearningRateSchedule
+        config:
+          d_model: 144
+          warmup_steps: 11174
+          max_lr: 0.00046187109390049094
+          min_lr: 0.00046187109390049094
+      beta_1: 0.9
+      beta_2: 0.98
+      epsilon: 1e-9
+  
+  pretrained: False
+
+  running_config:
+    batch_size: 1
+    num_epochs: 200
+    devices: [0]
+    checkpoint:
+      filepath: checkpoints/{epoch:02d}.h5
+      save_best_only: False
+      save_weights_only: True
+      save_freq: epoch
+    states_dir: states
+    csv_logger: training.log
+    tensorboard:
+      log_dir: tensorboard
+      histogram_freq: 1
+      write_graph: True
+      write_images: True
+      update_freq: epoch
+      profile_batch: 2
